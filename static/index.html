@@ -11,13 +11,20 @@
 </head>
 <body>
   <h2>Ubicación en tiempo real</h2>
+  <label>
+    <input type="checkbox" id="mostrarRutas">
+    Mostrar rutas
+  </label>
   <div id="map"></div>
 
   <script>
     let map;
-    let marker = null;
-    let path = [];
-    let polyline = null;
+    const marcadores = {};  // ID → marcador
+    const rutas = {};       // ID → array de puntos
+    const polilineas = {};  // ID → polilínea
+
+    const colores = ["#FF0000", "#0000FF", "#00FF00", "#FFA500", "#800080", "#00FFFF", "#FFC0CB"];
+    const coloresPorID = {}; // ID → color asignado
 
     function initMap() {
       const centro = { lat: -33.4263, lng: -70.5728 };
@@ -26,43 +33,68 @@
         zoom: 19,
       });
 
-      // Llamar cada 3 segundos
-      setInterval(obtenerUbicacion, 3000);
+      setInterval(obtenerUbicaciones, 3000);
     }
 
-    function obtenerUbicacion() {
+    function obtenerUbicaciones() {
       fetch("coordenadas.json")
         .then(response => response.json())
         .then(data => {
-          const nuevaLatLng = {
-            lat: data.lat,
-            lng: data.lng
-          };
+          data.forEach((item, index) => {
+            const id = item.id;
+            const posicion = { lat: item.lat, lng: item.lng };
 
-          // Actualizar marcador
-          if (marker) {
-            marker.setPosition(nuevaLatLng);
-          } else {
-            marker = new google.maps.Marker({
-              position: nuevaLatLng,
+            // Asignar color si no está definido
+            if (!coloresPorID[id]) {
+              coloresPorID[id] = colores[Object.keys(coloresPorID).length % colores.length];
+            }
+
+            // Actualizar o crear marcador
+            if (marcadores[id]) {
+              marcadores[id].setPosition(posicion);
+            } else {
+              marcadores[id] = new google.maps.Marker({
+              position: posicion,
               map: map,
-              title: "Ubicación actual"
+              title: `ID: ${id}`,
+              label: {
+                text: id,
+                color: "#000000",
+                fontSize: "12px",
+                fontWeight: "bold"
+              },
+              icon: {
+                url: "/static/vaca.png",  // si está en la misma carpeta que index.html
+                scaledSize: new google.maps.Size(60, 34),       // imagen 30% más pequeña
+                anchor: new google.maps.Point(30, 17),          // nuevo centro
+                labelOrigin: new google.maps.Point(30, 42)      // nuevo punto debajo del ícono
+              }
             });
-          }
+            }
 
-          // Agregar a ruta y dibujar línea
-          path.push(nuevaLatLng);
-          if (polyline) {
-            polyline.setMap(null);
-          }
-          polyline = new google.maps.Polyline({
-            path: path,
-            geodesic: true,
-            strokeColor: "#FF0000",
-            strokeOpacity: 1.0,
-            strokeWeight: 2,
+            // Guardar ruta y actualizar línea
+            if (!rutas[id]) rutas[id] = [];
+            rutas[id].push(posicion);
+
+            const mostrar = document.getElementById("mostrarRutas").checked;
+
+            if (polilineas[id]) {
+              polilineas[id].setMap(null); // Elimina línea anterior
+            }
+
+            if (mostrar) {
+              polilineas[id] = new google.maps.Polyline({
+                path: rutas[id],
+                geodesic: true,
+                strokeColor: coloresPorID[id],
+                strokeOpacity: 1.0,
+                strokeWeight: 2,
+              });
+              polilineas[id].setMap(map);
+            } else {
+              polilineas[id] = null;
+            }
           });
-          polyline.setMap(map);
         });
     }
   </script>

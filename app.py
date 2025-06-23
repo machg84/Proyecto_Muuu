@@ -3,28 +3,40 @@ import json
 import os
 
 app = Flask(__name__, static_folder='static')
+COORDS_FILE = os.path.join('static', 'coordenadas.json')
 
-# Ruta principal: entrega el HTML
+def leer_coordenadas():
+    if not os.path.exists(COORDS_FILE):
+        return []
+    with open(COORDS_FILE) as f:
+        return json.load(f)
+
+def escribir_coordenadas(data):
+    with open(COORDS_FILE, 'w') as f:
+        json.dump(data, f)
+
 @app.route('/')
 def home():
     return send_from_directory('static', 'index.html')
 
-# Ruta para obtener coordenadas
 @app.route('/coordenadas.json')
 def coordenadas():
-    with open('static/coordenadas.json') as f:
-        data = json.load(f)
-    return jsonify(data)
+    return jsonify(leer_coordenadas())
 
-# Ruta para actualizar coordenadas (requiere JSON con "lat" y "lng")
 @app.route('/actualizar', methods=['POST'])
 def actualizar():
     data = request.get_json()
-    if not data or 'lat' not in data or 'lng' not in data:
-        return jsonify({'error': 'Faltan lat o lng'}), 400
+
+    # Validar que sea una lista de objetos con id, lat, lng
+    if not isinstance(data, list):
+        return jsonify({'error': 'Se esperaba una lista de coordenadas'}), 400
+
+    for item in data:
+        if not all(k in item for k in ['id', 'lat', 'lng']):
+            return jsonify({'error': f'Falta id/lat/lng en uno de los elementos: {item}'}), 400
 
     with open('static/coordenadas.json', 'w') as f:
-        json.dump({'lat': data['lat'], 'lng': data['lng']}, f)
+        json.dump(data, f)
 
     return jsonify({'status': 'ok'}), 200
 
