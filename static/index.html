@@ -1,105 +1,94 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <title>Ubicación en vivo - Google Maps</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proyecto MUU - Monitoreo Animal</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
   <style>
+    body {
+      margin: 0;
+      font-family: 'Roboto', sans-serif;
+      background-color:rgb(0, 0, 0);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      background-color: rgb(0, 0, 0);
+      color: white;
+    }
+
+    header img {
+      height: 60px;
+      width: auto;
+    }
+
+    .controls {
+      background: white;
+      padding: 0.5rem 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .controls label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 1rem;
+    }
+
+    .controls button {
+      background-color: #d32f2f;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    .controls button:hover {
+      background-color: #b71c1c;
+    }
+
     #map {
-      height: 90vh;
+      flex-grow: 1;
       width: 100%;
+    }
+
+    @media (max-width: 600px) {
+      .controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+      }
     }
   </style>
 </head>
 <body>
-  <h2>Ubicación en tiempo real</h2>
-  <label>
-    <input type="checkbox" id="mostrarRutas">
-    Mostrar rutas
-  </label>
+  <header>
+
+    <img src="/static/img/logo-muu-blanco2.png" alt="Logo MUU" />
+
+  </header>
+
+  <div class="controls">
+    <label><input type="checkbox" id="mostrarRutas" /> Mostrar rutas</label>
+    <button onclick="limpiarArea()">Limpiar área</button>
+  </div>
+
   <div id="map"></div>
 
-  <script>
-    let map;
-    const marcadores = {};  // ID → marcador
-    const rutas = {};       // ID → array de puntos
-    const polilineas = {};  // ID → polilínea
-
-    const colores = ["#FF0000", "#0000FF", "#00FF00", "#FFA500", "#800080", "#00FFFF", "#FFC0CB"];
-    const coloresPorID = {}; // ID → color asignado
-
-    function initMap() {
-      const centro = { lat: -33.4263, lng: -70.5728 };
-      map = new google.maps.Map(document.getElementById("map"), {
-        center: centro,
-        zoom: 19,
-      });
-
-      setInterval(obtenerUbicaciones, 3000);
-    }
-
-    function obtenerUbicaciones() {
-      fetch("coordenadas.json")
-        .then(response => response.json())
-        .then(data => {
-          data.forEach((item, index) => {
-            const id = item.id;
-            const posicion = { lat: item.lat, lng: item.lng };
-
-            // Asignar color si no está definido
-            if (!coloresPorID[id]) {
-              coloresPorID[id] = colores[Object.keys(coloresPorID).length % colores.length];
-            }
-
-            // Actualizar o crear marcador
-            if (marcadores[id]) {
-              marcadores[id].setPosition(posicion);
-            } else {
-              marcadores[id] = new google.maps.Marker({
-              position: posicion,
-              map: map,
-              title: `ID: ${id}`,
-              label: {
-                text: id,
-                color: "#000000",
-                fontSize: "12px",
-                fontWeight: "bold"
-              },
-              icon: {
-                url: "/static/vaca.png",  // si está en la misma carpeta que index.html
-                scaledSize: new google.maps.Size(60, 34),       // imagen 30% más pequeña
-                anchor: new google.maps.Point(30, 17),          // nuevo centro
-                labelOrigin: new google.maps.Point(30, 42)      // nuevo punto debajo del ícono
-              }
-            });
-            }
-
-            // Guardar ruta y actualizar línea
-            if (!rutas[id]) rutas[id] = [];
-            rutas[id].push(posicion);
-
-            const mostrar = document.getElementById("mostrarRutas").checked;
-
-            if (polilineas[id]) {
-              polilineas[id].setMap(null); // Elimina línea anterior
-            }
-
-            if (mostrar) {
-              polilineas[id] = new google.maps.Polyline({
-                path: rutas[id],
-                geodesic: true,
-                strokeColor: coloresPorID[id],
-                strokeOpacity: 1.0,
-                strokeWeight: 2,
-              });
-              polilineas[id].setMap(map);
-            } else {
-              polilineas[id] = null;
-            }
-          });
-        });
-    }
-  </script>
-
-  <!-- Reemplaza TU_API_KEY con tu clave -->
+  <script src="/static/js/mapa.js"></script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAvyOFOIrug9iAPyF-flKntXIFCjQgG_JQ&callback=initMap" async defer></script>
 </body>
 </html>

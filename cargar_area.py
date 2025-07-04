@@ -1,17 +1,52 @@
 import serial
 import json
-import re
 import requests
-import time
 import re
-
-regex_emisor = re.compile(r"^E\d+$")
-URL = 'http://127.0.0.1:8080/' #https://proyecto-muuu.fly.dev
+import time
 
 
-# Configuración
-PUERTO = '/dev/tty.usbserial-A5069RR4'
+URL='https://proyecto-muuu.fly.dev'
+PUERTO = '/dev/cu.usbserial-A5069RR4'
 BAUDIOS = 9600
+URL_POLIGONO = f'{URL}/area.json'
+MAX_PUNTOS = 20
+
+# Variables para control de actualización de polígono
+ultimo_poligono = None
+ultimo_envio = 0
+INTERVALO_SEGUNDOS = 30
+
+def enviar_poligono_si_cambio():
+    global ultimo_poligono, ultimo_envio
+    ahora = time.time()
+
+    if ahora - ultimo_envio >= INTERVALO_SEGUNDOS:
+        try:
+            response = requests.get(URL_POLIGONO)
+            response.raise_for_status()
+            poligono = response.json()
+
+            if not isinstance(poligono, list) or len(poligono) > MAX_PUNTOS:
+                return
+
+            if poligono != ultimo_poligono:
+                print("🔄 Polígono nuevo detectado, enviando al Arduino...")
+                json_str = json.dumps(poligono)
+                arduino.write((json_str + "\n").encode("utf-8"))
+                ultimo_poligono = poligono
+                print("✅ Polígono actualizado")
+            #else:
+            #    print("Enviado: Sin cambios en el polígono")
+
+            ultimo_envio = ahora
+
+        except Exception as e:
+            print("⚠️ Error al verificar polígono:", e)
+
+
+# --- Lógica original del script para recibir coordenadas del Arduino ---
+regex_emisor = re.compile(r"^E\d+$")
+
 URL_GET = f'{URL}/coordenadas.json'
 URL_POST = f'{URL}/actualizar'
 
@@ -26,12 +61,14 @@ alias = {
 print("Esperando coordenadas desde Arduino...")
 
 while True:
+    enviar_poligono_si_cambio()
+
     try:
         linea = arduino.readline().decode("utf-8", errors="ignore").strip()
         print("Recibido:", linea)
 
         partes = linea.split("|")
-        if len(partes) != 3:
+        if len(partes) != 4:
             continue
 
         raw_id = partes[0].strip()

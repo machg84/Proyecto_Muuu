@@ -40,5 +40,33 @@ def actualizar():
 
     return jsonify({'status': 'ok'}), 200
 
+@app.route('/area.json')
+def obtener_area():
+    try:
+        with open('static/area.json') as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'error': 'No se pudo cargar el área', 'detalle': str(e)}), 500
+
+@app.route('/area.json', methods=['POST'])
+def actualizar_area():
+    data = request.get_json()
+
+    if not isinstance(data, list):
+        return jsonify({'error': 'Se esperaba una lista de coordenadas'}), 400
+
+    for punto in data:
+        if not all(k in punto for k in ['lat', 'lng']):
+            return jsonify({'error': f'Formato inválido: {punto}'}), 400
+
+    try:
+        with open('static/area.json', 'w') as f:
+            json.dump(data, f)
+        return jsonify({'status': 'Área guardada correctamente'}), 200
+    except Exception as e:
+        return jsonify({'error': 'No se pudo guardar el área', 'detalle': str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
