@@ -6,6 +6,7 @@ const rutas = {};       // ID → array de puntos
 const polilineas = {};  // ID → polilínea
 let puntosArea = [];
 let poligono = null;
+let poligonoReducido = null;
 let marcadoresArea = [];
 
 const colores = ["#FF0000", "#0000FF", "#00FF00", "#FFA500", "#800080", "#00FFFF", "#FFC0CB"];
@@ -39,6 +40,7 @@ function initMap() {
     marcadoresArea.push(marcador);
 
     if (poligono) poligono.setMap(null);
+    if (poligonoReducido) poligonoReducido.setMap(null);
 
     poligono = new google.maps.Polygon({
       paths: puntosArea,
@@ -50,16 +52,14 @@ function initMap() {
     });
     poligono.setMap(map);
 
+    // Dibuja el polígono reducido
+    poligonoReducido = dibujarPoligonoReducido(puntosArea, map);
+
     enviarAreaAlServidor();
   });
 
   map.addListener("rightclick", () => {
-    puntosArea = [];
-    if (poligono) {
-      poligono.setMap(null);
-      poligono = null;
-    }
-    enviarAreaVaciaAlServidor();
+    limpiarArea();
   });
 
   document.getElementById("mostrarRutas").addEventListener("change", () => {
@@ -78,6 +78,10 @@ function limpiarArea() {
     poligono.setMap(null);
     poligono = null;
   }
+  if (poligonoReducido) {
+    poligonoReducido.setMap(null);
+    poligonoReducido = null;
+  }
   marcadoresArea.forEach(m => m.setMap(null));
   marcadoresArea = [];
   puntosArea = [];
@@ -88,16 +92,65 @@ function obtenerUbicaciones() {
   fetch("/coordenadas.json")
     .then(response => response.json())
     .then(data => {
+      const statusArray = [];
       data.forEach(item => {
         const id = item.id;
         const posicion = { lat: item.lat, lng: item.lng };
+        let status = null;
 
         if (!coloresPorID[id]) {
           coloresPorID[id] = colores[Object.keys(coloresPorID).length % colores.length];
         }
 
+        let iconUrl = "/static/img/vaca.png";
+        if (puntosArea.length >= 3 && poligonoReducido) {
+          const punto = new google.maps.LatLng(posicion.lat, posicion.lng);
+          const poligonoPath = puntosArea.map(p => new google.maps.LatLng(p.lat, p.lng));
+          const poligonoGoogle = new google.maps.Polygon({ paths: poligonoPath });
+
+          const reducidoPath = poligonoReducido.getPath().getArray();
+          const poligonoReducidoGoogle = new google.maps.Polygon({
+            paths: reducidoPath
+          });
+
+          if (!google.maps.geometry.poly.containsLocation(punto, poligonoGoogle)) {
+            iconUrl = "/static/img/vaca_red.png";
+          } else if (!google.maps.geometry.poly.containsLocation(punto, poligonoReducidoGoogle)) {
+            iconUrl = "/static/img/vaca_yellow.png";
+          } else {
+            iconUrl = "/static/img/vaca.png";
+          }
+        }
+
+        if (puntosArea.length >= 3) {
+          const coords = puntosArea.map(p => [p.lng, p.lat]);
+          if (coords[0][0] !== coords[coords.length-1][0] || coords[0][1] !== coords[coords.length-1][1]) {
+            coords.push(coords[0]);
+          }
+          const poligonoGeo = turf.polygon([coords]);
+          const puntoGeo = turf.point([posicion.lng, posicion.lat]);
+
+          // Calcular la distancia mínima al borde
+          let minDist = Infinity;
+          for (let i = 0; i < coords.length - 1; i++) {
+            const linea = turf.lineString([coords[i], coords[i+1]]);
+            const dist = turf.pointToLineDistance(puntoGeo, linea, {units: 'meters'});
+            if (dist < minDist) minDist = dist;
+          }
+
+          // Verificar si está dentro del polígono
+          const dentro = turf.booleanPointInPolygon(puntoGeo, poligonoGeo);
+          status = dentro ? Math.round(minDist) : -Math.round(minDist);
+        }
+
         if (marcadores[id]) {
           marcadores[id].setPosition(posicion);
+          marcadores[id].setIcon({
+            url: iconUrl,
+            scaledSize: new google.maps.Size(60, 34),
+            anchor: new google.maps.Point(30, 17),
+            labelOrigin: new google.maps.Point(30, 42)
+          });
         } else {
           marcadores[id] = new google.maps.Marker({
             position: posicion,
@@ -110,7 +163,7 @@ function obtenerUbicaciones() {
               fontWeight: "bold"
             },
             icon: {
-              url: "/static/img/vaca.png",
+              url: iconUrl,
               scaledSize: new google.maps.Size(60, 34),
               anchor: new google.maps.Point(30, 17),
               labelOrigin: new google.maps.Point(30, 42)
@@ -135,6 +188,15 @@ function obtenerUbicaciones() {
         } else {
           polilineas[id] = null;
         }
+
+        statusArray.push({ id: id, status: status });
+      });
+
+      // Enviar status al backend
+      fetch('/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(statusArray)
       });
     });
 }
@@ -172,6 +234,11 @@ function cargarAreaDesdeServidor() {
     .then(data => {
       if (!Array.isArray(data) || data.length < 3) return;
       puntosArea = data;
+      marcadoresArea.forEach(m => m.setMap(null));
+      marcadoresArea = [];
+      if (poligono) poligono.setMap(null);
+      if (poligonoReducido) poligonoReducido.setMap(null);
+
       puntosArea.forEach(punto => {
         const marcador = new google.maps.Marker({
           position: punto,
@@ -197,5 +264,39 @@ function cargarAreaDesdeServidor() {
         fillOpacity: 0.2
       });
       poligono.setMap(map);
+
+      // Dibuja el polígono reducido
+      poligonoReducido = dibujarPoligonoReducido(puntosArea, map);
     });
+}
+
+function dibujarPoligonoReducido(puntosArea, mapa) {
+  if (puntosArea.length < 3) return null;
+
+  // Convertir a GeoJSON
+  const coords = puntosArea.map(p => [p.lng, p.lat]);
+  // Cerrar el polígono si no está cerrado
+  if (coords[0][0] !== coords[coords.length-1][0] || coords[0][1] !== coords[coords.length-1][1]) {
+    coords.push(coords[0]);
+  }
+  const geojson = turf.polygon([coords]);
+
+  // Buffer negativo de 5 metros
+  const reducido = turf.buffer(geojson, -5, { units: 'meters' });
+
+  // Obtener los nuevos puntos
+  const nuevosPuntos = reducido.geometry.coordinates[0].map(coord => ({lat: coord[1], lng: coord[0]}));
+
+  // Dibujar el polígono reducido
+  const poligonoReducido = new google.maps.Polygon({
+    paths: nuevosPuntos,
+    strokeColor: "#00FF00",   // Verde
+    strokeOpacity: 0.8,
+    strokeWeight: 2,
+    fillColor: "#00FF00",     // Verde
+    fillOpacity: 0.2,
+    map: mapa
+  });
+
+  return poligonoReducido;
 }

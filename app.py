@@ -67,6 +67,21 @@ def actualizar_area():
     except Exception as e:
         return jsonify({'error': 'No se pudo guardar el área', 'detalle': str(e)}), 500
 
+@app.route('/status', methods=['POST'])
+def actualizar_status():
+    data = request.get_json()
+    try:
+        with open('static/status.json', 'w') as f:
+            json.dump(data, f)
+        return jsonify({'status': 'ok'}), 200
+    except Exception as e:
+        return jsonify({'error': 'No se pudo guardar el status', 'detalle': str(e)}), 500
+
+@app.route('/status.json')
+def status():
+    with open('static/status.json') as f:
+        data = json.load(f)
+    return jsonify(data)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)

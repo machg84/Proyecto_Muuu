@@ -6,7 +6,7 @@ import time
 import re
 
 regex_emisor = re.compile(r"^E\d+$")
-URL = 'http://127.0.0.1:8080/' #https://proyecto-muuu.fly.dev
+URL = 'https://proyecto-muuu.fly.dev' #'http://127.0.0.1:8080'
 
 
 # Configuración
@@ -14,6 +14,7 @@ PUERTO = '/dev/tty.usbserial-A5069RR4'
 BAUDIOS = 9600
 URL_GET = f'{URL}/coordenadas.json'
 URL_POST = f'{URL}/actualizar'
+URL_STATUS = f'{URL}/status.json'
 
 arduino = serial.Serial(PUERTO, BAUDIOS, timeout=1)
 
@@ -23,9 +24,43 @@ alias = {
     "E2": "Rulo"
 }
 
+ultimo_status = None
+ultimo_envio_status = 0
+INTERVALO_STATUS = 2  # segundos
+
+def enviar_status_si_cambio():
+    global ultimo_status, ultimo_envio_status
+    ahora = time.time()
+    if ahora - ultimo_envio_status >= INTERVALO_STATUS:
+        try:
+            response = requests.get(URL_STATUS)
+            response.raise_for_status()
+            status = response.json()
+            # Filtrar solo los registros con status numérico y <= 5
+            status_filtrado = [
+                item for item in status
+                if isinstance(item.get("status"), (int, float)) #and item["status"] <= 5
+            ]
+                        # Formatear como E1|status (usando alias inverso)
+            alias_inverso = {v: k for k, v in alias.items()}
+            lineas = []
+            for item in status_filtrado:
+                id_arduino = alias_inverso.get(item["id"], item["id"])
+                lineas.append(f"{id_arduino}|{item['status']}")
+            mensaje = "\n".join(lineas) + "\n"
+            if status != ultimo_status:
+                print("Status nuevo detectado, enviando al Arduino...")
+                print("Mensaje enviado:", mensaje.strip())
+                arduino.write(mensaje.encode("utf-8"))
+                ultimo_status = status
+            ultimo_envio_status = ahora
+        except Exception as e:
+            print("⚠️ Error al verificar status:", e)
+
 print("Esperando coordenadas desde Arduino...")
 
 while True:
+    enviar_status_si_cambio()
     try:
         linea = arduino.readline().decode("utf-8", errors="ignore").strip()
         print("Recibido:", linea)
@@ -36,7 +71,9 @@ while True:
 
         raw_id = partes[0].strip()
         if not regex_emisor.match(raw_id):
-            print(f"ID inválido: '{raw_id}' → no cumple con el formato 'E#'")
+            # Solo mostrar el mensaje si la línea no es un ACK
+            if not raw_id.startswith("ACK"):
+                print(f"ID inválido: '{raw_id}' → no cumple con el formato 'E#'")
             continue
 
         animal_id = alias.get(raw_id, raw_id)
