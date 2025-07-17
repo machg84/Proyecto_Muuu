@@ -13,64 +13,83 @@ const colores = ["#FF0000", "#0000FF", "#00FF00", "#FFA500", "#800080", "#00FFFF
 const coloresPorID = {}; // ID → color asignado
 
 function initMap() {
-  const centro = { lat: -33.4263, lng: -70.5728 };
-  map = new google.maps.Map(document.getElementById("map"), {
-    center: centro,
-    zoom: 19,
-  });
+  const centroPorDefecto = { lat: -33.4263, lng: -70.5728 };
 
-  setInterval(obtenerUbicaciones, 3000);
+  function inicializarMapa(centro) {
+    map = new google.maps.Map(document.getElementById("map"), {
+      center: centro,
+      zoom: 18,
+    });
 
-  map.addListener("click", (e) => {
-    const punto = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-    puntosArea.push(punto);
+    setInterval(obtenerUbicaciones, 3000);
 
-    const marcador = new google.maps.Marker({
-      position: punto,
-      map: map,
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 5,
+    map.addListener("click", (e) => {
+      const punto = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+      puntosArea.push(punto);
+
+      const marcador = new google.maps.Marker({
+        position: punto,
+        map: map,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 5,
+          fillColor: "#FF0000",
+          fillOpacity: 1,
+          strokeWeight: 1,
+          strokeColor: "#000000"
+        }
+      });
+      marcadoresArea.push(marcador);
+
+      if (poligono) poligono.setMap(null);
+      if (poligonoReducido) poligonoReducido.setMap(null);
+
+      poligono = new google.maps.Polygon({
+        paths: puntosArea,
+        strokeColor: "#FF0000",
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
         fillColor: "#FF0000",
-        fillOpacity: 1,
-        strokeWeight: 1,
-        strokeColor: "#000000"
+        fillOpacity: 0.2
+      });
+      poligono.setMap(map);
+
+      poligonoReducido = dibujarPoligonoReducido(puntosArea, map);
+
+      enviarAreaAlServidor();
+    });
+
+    map.addListener("rightclick", () => {
+      limpiarArea();
+    });
+
+    document.getElementById("mostrarRutas").addEventListener("change", () => {
+      Object.keys(polilineas).forEach(id => {
+        if (polilineas[id]) {
+          polilineas[id].setMap(document.getElementById("mostrarRutas").checked ? map : null);
+        }
+      });
+    });
+
+    cargarAreaDesdeServidor();
+  }
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const centro = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        inicializarMapa(centro);
+      },
+      () => {
+        inicializarMapa(centroPorDefecto);
       }
-    });
-    marcadoresArea.push(marcador);
-
-    if (poligono) poligono.setMap(null);
-    if (poligonoReducido) poligonoReducido.setMap(null);
-
-    poligono = new google.maps.Polygon({
-      paths: puntosArea,
-      strokeColor: "#FF0000",
-      strokeOpacity: 0.8,
-      strokeWeight: 2,
-      fillColor: "#FF0000",
-      fillOpacity: 0.2
-    });
-    poligono.setMap(map);
-
-    // Dibuja el polígono reducido
-    poligonoReducido = dibujarPoligonoReducido(puntosArea, map);
-
-    enviarAreaAlServidor();
-  });
-
-  map.addListener("rightclick", () => {
-    limpiarArea();
-  });
-
-  document.getElementById("mostrarRutas").addEventListener("change", () => {
-    Object.keys(polilineas).forEach(id => {
-      if (polilineas[id]) {
-        polilineas[id].setMap(document.getElementById("mostrarRutas").checked ? map : null);
-      }
-    });
-  });
-
-  cargarAreaDesdeServidor();
+    );
+  } else {
+    inicializarMapa(centroPorDefecto);
+  }
 }
 
 function limpiarArea() {

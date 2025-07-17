@@ -41,18 +41,21 @@ def enviar_status_si_cambio():
                 item for item in status
                 if isinstance(item.get("status"), (int, float)) #and item["status"] <= 5
             ]
-                        # Formatear como E1|status (usando alias inverso)
+            # Formatear como E1|status (usando alias inverso)
+            ultimo_status_dict = {item["id"]: item["status"] for item in ultimo_status} if ultimo_status else {}
             alias_inverso = {v: k for k, v in alias.items()}
             lineas = []
             for item in status_filtrado:
                 id_arduino = alias_inverso.get(item["id"], item["id"])
-                lineas.append(f"{id_arduino}|{item['status']}")
-            mensaje = "\n".join(lineas) + "\n"
-            if status != ultimo_status:
-                print("Status nuevo detectado, enviando al Arduino...")
+                # Solo enviar si el status cambió o es nuevo
+                if ultimo_status_dict.get(item["id"]) != item["status"]:
+                    lineas.append(f"{id_arduino}|{item['status']}")
+            mensaje = "\n".join(lineas) + ("\n" if lineas else "")
+            if lineas:
+                print("Status cambiado detectado, enviando al Arduino...")
                 print("Mensaje enviado:", mensaje.strip())
                 arduino.write(mensaje.encode("utf-8"))
-                ultimo_status = status
+            ultimo_status = status_filtrado
             ultimo_envio_status = ahora
         except Exception as e:
             print("⚠️ Error al verificar status:", e)
